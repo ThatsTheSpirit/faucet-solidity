@@ -21,6 +21,11 @@ contract Faucet is Pausable, Ownable {
      */
     error TooManyTokens(uint balance);
 
+    /**
+     * @dev The operation failed because the caller is not an EOA.
+     */
+    error NotAnEOA();
+
     IERC20 public faucetToken;
     uint public immutable maxTokens;
     uint public immutable interval;
@@ -35,6 +40,18 @@ contract Faucet is Pausable, Ownable {
         }
         _;
     }
+
+    modifier onlyEOA() {
+        if (msg.sender != tx.origin) {
+            revert NotAnEOA();
+        }
+        _;
+    }
+
+    // modifier onlyEOA() {
+    //     require(msg.sender.code.length <= 0, "Not allowed");
+    //     _;
+    // }
 
     /**
      * @dev Throws if the caller has enough tokens.
@@ -62,8 +79,15 @@ contract Faucet is Pausable, Ownable {
 
     /**
      * @dev Transfers tokens to the caller and stores last time.
+     * The caller has to call approve function on this contract.
      */
-    function getTokens() external whenNotPaused onlyOnTime onlyCorrectBalance {
+    function getTokens()
+        external
+        whenNotPaused
+        onlyEOA
+        onlyOnTime
+        onlyCorrectBalance
+    {
         timestamps[msg.sender] = block.timestamp;
         faucetToken.transfer(msg.sender, maxTokens);
         emit Request(msg.sender);
@@ -79,5 +103,9 @@ contract Faucet is Pausable, Ownable {
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    function getBalance() external view returns (uint) {
+        return faucetToken.balanceOf(address(this));
     }
 }
