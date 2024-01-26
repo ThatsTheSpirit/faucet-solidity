@@ -74,4 +74,32 @@ describe("Faucet", function () {
                 .withArgs(player.address);
         });
     });
+
+    describe("unpause", function () {
+        let tx, res;
+        beforeEach(async () => {
+            tx = await faucetContract.connect(owner).pause();
+            res = await tx.wait();
+        });
+        it("only owner can unpause", async () => {
+            expect(await faucetContract.connect(owner).unpause())
+                .to.emit(faucetContract, "Unpaused")
+                .withArgs(owner.address);
+        });
+        it("can't unpause if the caller is not the owner", async () => {
+            await expect(faucetContract.connect(player).unpause())
+                .to.be.revertedWithCustomError(
+                    faucetContract,
+                    "OwnableUnauthorizedAccount",
+                )
+                .withArgs(player.address);
+        });
+
+        it("can't unpause if paused is false", async () => {
+            await faucetContract.connect(owner).unpause();
+            await expect(
+                faucetContract.connect(owner).unpause(),
+            ).to.be.revertedWithCustomError(faucetContract, "ExpectedPause");
+        });
+    });
 });
