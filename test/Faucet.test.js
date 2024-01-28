@@ -4,13 +4,16 @@ const {
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { any } = require("hardhat/internal/core/params/argumentTypes");
 
 function convertTokens(amount, decimals) {
     return BigInt(amount * 10 ** decimals);
 }
 
 describe("Faucet", function () {
-    let owner, player, faucetContract, testTokenContract, tokenDecimals;
+    let owner, player, faucetContract, testTokenContract;
+    const amountTokens = 0.5,
+        tokenDecimals = 18;
     beforeEach(async () => {
         const accounts = await ethers.getSigners();
         owner = accounts[0];
@@ -18,7 +21,6 @@ describe("Faucet", function () {
         const contracts = await loadFixture(deployFaucetFixture);
         faucetContract = contracts.faucetContract;
         testTokenContract = contracts.testTokenContract;
-        tokenDecimals = contracts.decimals;
     });
 
     async function deployTestTokenFixture() {
@@ -30,17 +32,15 @@ describe("Faucet", function () {
         );
         await testTokenContract.waitForDeployment();
 
-        const decimals = Number(await testTokenContract.decimals());
+        //const decimals = Number(await testTokenContract.decimals());
 
-        return { testTokenContract, decimals };
+        return { testTokenContract /*, decimals*/ };
     }
 
     async function deployFaucetFixture() {
-        const { testTokenContract, decimals } = await loadFixture(
-            deployTestTokenFixture,
-        );
-        const amountTokens = 0.5;
-        const maxTokens = convertTokens(amountTokens, decimals);
+        const { testTokenContract } = await loadFixture(deployTestTokenFixture);
+
+        const maxTokens = convertTokens(amountTokens, tokenDecimals);
         const interval = time.duration.hours(24);
         const faucetContract = await ethers.deployContract("Faucet", [
             testTokenContract.target,
@@ -48,14 +48,23 @@ describe("Faucet", function () {
             interval,
         ]);
         await faucetContract.waitForDeployment();
-        return { testTokenContract, faucetContract, decimals };
+
+        //approve
+        let tx = await testTokenContract
+            .connect(owner)
+            .approve(faucetContract.target, maxTokens);
+        await tx.wait();
+
+        //deposit some tokens
+        tx = await faucetContract.connect(owner).deposit(maxTokens);
+        await tx.wait();
+
+        return { testTokenContract, faucetContract /*decimals*/ };
     }
 
     describe("constructor", () => {
         it("should initialize state variables", async () => {
-            const amountTokens = 0.5;
-            const decimals = Number(await testTokenContract.decimals());
-            const maxTokens = convertTokens(amountTokens, decimals);
+            const maxTokens = convertTokens(amountTokens, tokenDecimals);
             const interval = time.duration.hours(24);
 
             expect(await faucetContract.faucetToken()).to.equal(
@@ -112,7 +121,7 @@ describe("Faucet", function () {
 
     describe("deposit", () => {
         it("can deposit tokens", async () => {
-            const amount = convertTokens(0.5, tokenDecimals);
+            const amount = convertTokens(amountTokens, tokenDecimals);
             let tx = await testTokenContract.approve(
                 faucetContract.target,
                 amount,
@@ -126,6 +135,66 @@ describe("Faucet", function () {
                 [owner, faucetContract],
                 [-amount, amount],
             );
+        });
+    });
+
+    describe("getTokens", () => {
+        let tx, res;
+        describe("Failure", () => {
+            it("reverts when paused is true", async () => {
+                tx = await faucetContract.connect(owner).pause();
+                await tx.wait();
+
+                await expect(
+                    faucetContract.connect(owner).getTokens(),
+                ).to.be.revertedWithCustomError(
+                    faucetContract,
+                    "EnforcedPause",
+                );
+            });
+            it("reverts when the caller is a contract", async () => {
+                const helperContract = await ethers.deployContract("Helper");
+                await helperContract.waitForDeployment();
+
+                await expect(
+                    helperContract
+                        .connect(owner)
+                        .getTokensThroughProxy(faucetContract.target),
+                ).to.be.revertedWithCustomError(faucetContract, "NotAnEOA");
+            });
+            it("reverts if too little time has passed", async () => {
+                const amount = convertTokens(amountTokens, tokenDecimals);
+                tx = await faucetContract.connect(player).getTokens();
+                await tx.wait();
+
+                tx = await testTokenContract.transfer(owner, amount);
+                await tx.wait();
+
+                await expect(
+                    faucetContract.connect(player).getTokens(),
+                ).to.be.revertedWithCustomError(
+                    faucetContract,
+                    "WrongRequestTime",
+                );
+            });
+            it("reverts if the caller's balance is enough", async () => {
+                const amount = convertTokens(amountTokens, tokenDecimals);
+                tx = await faucetContract.connect(player).getTokens();
+                await tx.wait();
+
+                const balancePlayer = await testTokenContract.balanceOf(
+                    player.address,
+                );
+
+                await time.increase(time.duration.hours(25));
+
+                await expect(faucetContract.connect(player).getTokens())
+                    .to.be.revertedWithCustomError(
+                        faucetContract,
+                        "TooManyTokens",
+                    )
+                    .withArgs(balancePlayer);
+            });
         });
     });
 });
