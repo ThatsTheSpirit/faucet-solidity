@@ -5,8 +5,12 @@ const {
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+function convertTokens(amount, decimals) {
+    return BigInt(amount * 10 ** decimals);
+}
+
 describe("Faucet", function () {
-    let owner, player, faucetContract, testTokenContract;
+    let owner, player, faucetContract, testTokenContract, tokenDecimals;
     beforeEach(async () => {
         const accounts = await ethers.getSigners();
         owner = accounts[0];
@@ -14,13 +18,16 @@ describe("Faucet", function () {
         const contracts = await loadFixture(deployFaucetFixture);
         faucetContract = contracts.faucetContract;
         testTokenContract = contracts.testTokenContract;
+        tokenDecimals = contracts.decimals;
     });
 
     async function deployTestTokenFixture() {
-        const testTokenContract = await ethers.deployContract("TestToken", [
+        const initialSupply = convertTokens(100e6, 18);
+        const testTokenContract = await ethers.deployContract(
             "TestToken",
-            "TET",
-        ]);
+            ["TestToken", "TET", initialSupply],
+            owner,
+        );
         await testTokenContract.waitForDeployment();
 
         const decimals = Number(await testTokenContract.decimals());
@@ -33,7 +40,7 @@ describe("Faucet", function () {
             deployTestTokenFixture,
         );
         const amountTokens = 0.5;
-        const maxTokens = BigInt(amountTokens * 10 ** decimals);
+        const maxTokens = convertTokens(amountTokens, decimals);
         const interval = time.duration.hours(24);
         const faucetContract = await ethers.deployContract("Faucet", [
             testTokenContract.target,
@@ -41,14 +48,14 @@ describe("Faucet", function () {
             interval,
         ]);
         await faucetContract.waitForDeployment();
-        return { testTokenContract, faucetContract };
+        return { testTokenContract, faucetContract, decimals };
     }
 
     describe("constructor", () => {
         it("should initialize state variables", async () => {
             const amountTokens = 0.5;
             const decimals = Number(await testTokenContract.decimals());
-            const maxTokens = BigInt(amountTokens * 10 ** decimals);
+            const maxTokens = convertTokens(amountTokens, decimals);
             const interval = time.duration.hours(24);
 
             expect(await faucetContract.faucetToken()).to.equal(
@@ -100,6 +107,25 @@ describe("Faucet", function () {
             await expect(
                 faucetContract.connect(owner).unpause(),
             ).to.be.revertedWithCustomError(faucetContract, "ExpectedPause");
+        });
+    });
+
+    describe("deposit", () => {
+        it("can deposit tokens", async () => {
+            const amount = convertTokens(0.5, tokenDecimals);
+            let tx = await testTokenContract.approve(
+                faucetContract.target,
+                amount,
+            );
+            await tx.wait();
+
+            await expect(
+                faucetContract.connect(owner).deposit(amount),
+            ).to.changeTokenBalances(
+                testTokenContract,
+                [owner, faucetContract],
+                [-amount, amount],
+            );
         });
     });
 });
