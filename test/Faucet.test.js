@@ -11,13 +11,14 @@ function convertTokens(amount, decimals) {
 }
 
 describe("Faucet", function () {
-    let owner, player, faucetContract, testTokenContract;
+    let owner, player, player2, faucetContract, testTokenContract;
     const amountTokens = 0.5,
         tokenDecimals = 18;
     beforeEach(async () => {
         const accounts = await ethers.getSigners();
         owner = accounts[0];
         player = accounts[1];
+        player2 = accounts[2];
         const contracts = await loadFixture(deployFaucetFixture);
         faucetContract = contracts.faucetContract;
         testTokenContract = contracts.testTokenContract;
@@ -40,6 +41,7 @@ describe("Faucet", function () {
     async function deployFaucetFixture() {
         const { testTokenContract } = await loadFixture(deployTestTokenFixture);
 
+        const tokensToDeposit = convertTokens(1000, tokenDecimals);
         const maxTokens = convertTokens(amountTokens, tokenDecimals);
         const interval = time.duration.hours(24);
         const faucetContract = await ethers.deployContract("Faucet", [
@@ -52,11 +54,11 @@ describe("Faucet", function () {
         //approve
         let tx = await testTokenContract
             .connect(owner)
-            .approve(faucetContract.target, maxTokens);
+            .approve(faucetContract.target, tokensToDeposit);
         await tx.wait();
 
         //deposit some tokens
-        tx = await faucetContract.connect(owner).deposit(maxTokens);
+        tx = await faucetContract.connect(owner).deposit(tokensToDeposit);
         await tx.wait();
 
         return { testTokenContract, faucetContract /*decimals*/ };
@@ -140,6 +142,38 @@ describe("Faucet", function () {
 
     describe("getTokens", () => {
         let tx, res;
+        describe("Success", () => {
+            beforeEach(async () => {
+                tx = await faucetContract.connect(player).getTokens();
+                res = await tx.wait();
+            });
+
+            it("saves the timestamp", async () => {
+                const currTime = await time.latest();
+                expect(
+                    await faucetContract.timestamps(player.address),
+                ).to.equal(currTime);
+            });
+
+            it("transfers tokens", async () => {
+                const amount = await faucetContract.maxTokens();
+                await expect(
+                    faucetContract.connect(player2).getTokens(),
+                ).to.changeTokenBalances(
+                    testTokenContract,
+                    [player2, faucetContract],
+                    [amount, -amount],
+                );
+            });
+
+            it("emits the Request event", async () => {
+                const filter = faucetContract.filters.Request;
+                const events = await faucetContract.queryFilter(filter, -1);
+                const event = events[0];
+                const args = event.args;
+                expect(args.account).to.equal(player);
+            });
+        });
         describe("Failure", () => {
             it("reverts when paused is true", async () => {
                 tx = await faucetContract.connect(owner).pause();
