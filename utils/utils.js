@@ -16,6 +16,11 @@ const verify = async (contractAddress, args) => {
     }
 };
 
+const convertTokens = (amount, decimals) => {
+    return BigInt(amount * 10 ** decimals);
+};
+
 module.exports = {
     verify,
+    convertTokens,
 };

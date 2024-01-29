@@ -4,11 +4,7 @@ const {
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { any } = require("hardhat/internal/core/params/argumentTypes");
-
-function convertTokens(amount, decimals) {
-    return BigInt(amount * 10 ** decimals);
-}
+const { convertTokens } = require("../utils/utils");
 
 describe("Faucet", function () {
     let owner, player, player2, faucetContract, testTokenContract;
