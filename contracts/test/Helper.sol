@@ -5,6 +5,6 @@ import "../Faucet.sol";
 
 contract Helper {
     function getTokensThroughProxy(address _faucetContract) external {
-        Faucet(_faucetContract).getTokens();
+        Faucet(_faucetContract).getTokens(msg.sender);
     }
 }
