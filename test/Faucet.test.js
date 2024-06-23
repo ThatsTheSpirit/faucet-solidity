@@ -140,7 +140,9 @@ describe("Faucet", function () {
         let tx, res;
         describe("Success", () => {
             beforeEach(async () => {
-                tx = await faucetContract.connect(player).getTokens();
+                tx = await faucetContract
+                    .connect(player)
+                    .getTokens(player.address);
                 res = await tx.wait();
             });
 
@@ -154,7 +156,7 @@ describe("Faucet", function () {
             it("transfers tokens", async () => {
                 const amount = await faucetContract.maxTokens();
                 await expect(
-                    faucetContract.connect(player2).getTokens(),
+                    faucetContract.connect(player2).getTokens(player2.address),
                 ).to.changeTokenBalances(
                     testTokenContract,
                     [player2, faucetContract],
@@ -163,11 +165,13 @@ describe("Faucet", function () {
             });
 
             it("emits the Request event", async () => {
+                const amount = await faucetContract.maxTokens();
                 const filter = faucetContract.filters.Request;
                 const events = await faucetContract.queryFilter(filter, -1);
                 const event = events[0];
                 const args = event.args;
                 expect(args.account).to.equal(player);
+                expect(args.amount).to.equal(amount);
             });
         });
         describe("Failure", () => {
@@ -176,7 +180,7 @@ describe("Faucet", function () {
                 await tx.wait();
 
                 await expect(
-                    faucetContract.connect(owner).getTokens(),
+                    faucetContract.connect(owner).getTokens(owner.address),
                 ).to.be.revertedWithCustomError(
                     faucetContract,
                     "EnforcedPause",
@@ -194,14 +198,16 @@ describe("Faucet", function () {
             });
             it("reverts if too little time has passed", async () => {
                 const amount = convertTokens(amountTokens, tokenDecimals);
-                tx = await faucetContract.connect(player).getTokens();
+                tx = await faucetContract
+                    .connect(player)
+                    .getTokens(player.address);
                 await tx.wait();
 
                 tx = await testTokenContract.transfer(owner, amount);
                 await tx.wait();
 
                 await expect(
-                    faucetContract.connect(player).getTokens(),
+                    faucetContract.connect(player).getTokens(player.address),
                 ).to.be.revertedWithCustomError(
                     faucetContract,
                     "WrongRequestTime",
@@ -209,7 +215,9 @@ describe("Faucet", function () {
             });
             it("reverts if the caller's balance is enough", async () => {
                 const amount = convertTokens(amountTokens, tokenDecimals);
-                tx = await faucetContract.connect(player).getTokens();
+                tx = await faucetContract
+                    .connect(player)
+                    .getTokens(player.address);
                 await tx.wait();
 
                 const balancePlayer = await testTokenContract.balanceOf(
@@ -218,7 +226,9 @@ describe("Faucet", function () {
 
                 await time.increase(time.duration.hours(25));
 
-                await expect(faucetContract.connect(player).getTokens())
+                await expect(
+                    faucetContract.connect(player).getTokens(player.address),
+                )
                     .to.be.revertedWithCustomError(
                         faucetContract,
                         "TooManyTokens",
