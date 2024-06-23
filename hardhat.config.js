@@ -1,5 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("@nomicfoundation/hardhat-verify");
+require("@nomicfoundation/hardhat-ethers");
+require("@nomicfoundation/hardhat-ignition-ethers");
 require("dotenv").config();
 
 const ALCHEMY_API_KEY_SEPOLIA = process.env.ALCHEMY_API_KEY_SEPOLIA || "0x";
@@ -20,6 +22,9 @@ module.exports = {
         },
     },
     networks: {
+        hardhat: {
+            chainId: 31337,
+        },
         localhost: {
             chainId: 31337,
         },
