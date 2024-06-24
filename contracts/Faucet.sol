@@ -34,8 +34,8 @@ contract Faucet is Pausable, Ownable {
     /**
      * @dev Throws if too little time has passed.
      */
-    modifier onlyOnTime() {
-        if (block.timestamp <= timestamps[msg.sender] + interval) {
+    modifier onlyOnTime(address _receiver) {
+        if (block.timestamp <= timestamps[_receiver] + interval) {
             revert WrongRequestTime();
         }
         _;
@@ -51,8 +51,8 @@ contract Faucet is Pausable, Ownable {
     /**
      * @dev Throws if the caller has enough tokens.
      */
-    modifier onlyCorrectBalance() {
-        uint userBalance = faucetToken.balanceOf(msg.sender);
+    modifier onlyCorrectBalance(address _receiver) {
+        uint userBalance = faucetToken.balanceOf(_receiver);
         if (userBalance >= maxTokens) {
             revert TooManyTokens(userBalance);
         }
@@ -86,7 +86,13 @@ contract Faucet is Pausable, Ownable {
      */
     function getTokens(
         address _receiver
-    ) external whenNotPaused onlyEOA onlyOnTime onlyCorrectBalance {
+    )
+        external
+        whenNotPaused
+        onlyEOA
+        onlyOnTime(_receiver)
+        onlyCorrectBalance(_receiver)
+    {
         timestamps[_receiver] = block.timestamp;
         faucetToken.transfer(_receiver, maxTokens);
         emit Request(_receiver, maxTokens, block.timestamp);
